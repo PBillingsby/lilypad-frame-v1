@@ -1,5 +1,7 @@
 /** @jsxImportSource frog/jsx */
 
+import { runCliCommand } from '@/app/services/cli'
+import { saveImage } from '@/app/services/saveImage'
 import { Button, Frog, TextInput } from 'frog'
 import { devtools } from 'frog/dev'
 // import { neynar } from 'frog/hubs'
@@ -12,9 +14,6 @@ const app = new Frog({
   // Supply a Hub to enable frame verification.
   // hub: neynar({ apiKey: 'NEYNAR_FROG_FM' })
 })
-
-// Uncomment to use Edge Runtime
-// export const runtime = 'edge'
 
 app.frame('/', async (c) => {
   const { buttonValue, inputText, status } = c
@@ -38,22 +37,11 @@ app.frame('/', async (c) => {
           width: '100%',
         }}
       >
-        <div
-          style={{
-            color: 'white',
-            fontSize: 60,
-            fontStyle: 'normal',
-            letterSpacing: '-0.025em',
-            lineHeight: 1.4,
-            marginTop: 30,
-            padding: '0 120px',
-            whiteSpace: 'pre-wrap',
-          }}
-        >
-          {status === 'response'
-            ? `Nice choice.${inputText?.toUpperCase()}`
-            : 'Welcome!'}
-        </div>
+        {status === 'response'
+          ? `Nice choice.${inputText?.toUpperCase()}`
+          :
+          <img src="/frame-placeholder.png" width="100%" height="100%" />
+        }
       </div>
     ),
     intents: [
@@ -65,34 +53,35 @@ app.frame('/', async (c) => {
 })
 
 app.frame('/submit', async (c) => {
-  const { buttonValue, inputText } = c
-  const res = await fetch(`https://app.lilypad.tech/gradio/sdxl/run/predict?__theme=light&userApiToken=${process.env.USER_API_KEY}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      "data": [
-        "blue sky day with robots discussing AGI"
-      ],
-      "event_data": null,
-      "fn_index": 0,
-      "session_hash": process.env.USER_SESSION // Ensure the session_hash matches your successful payload
-    })
-  });
+  const { inputText, url } = c
 
-  const returned = await res.json();
+  try {
+    const filePath = await runCliCommand({ userInput: inputText });
+    const urlPath = filePath.replace('/tmp/lilypad/data/downloaded-files', '');
+    console.log(filePath, urlPath)
+  } catch (error) {
+    console.log(error)
+    // c.res.status(500).send('Error processing command: ' + error.message);
+  }
+  // Replace img src with returned IPFS link
   return c.res({
     action: '/',
     image: (
       <div style={{ color: 'white', display: 'flex', fontSize: 60 }}>
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Placeholder_view_vector.svg/681px-Placeholder_view_vector.svg.png" />
+        <img src="https://ipfs.io/ipfs/QmQqzMTavQgT4f4T5v6PWBp7XNKtoPmC9jvn12WPT3gkSE" />
       </div>
     ),
     intents: [
+      <Button value="save">Save</Button>,
       <Button value="reset">Reset</Button>,
     ],
   })
+})
+
+app.frame('/save', (c: any) => {
+  console.log(c.url)
+
+  return c.url
 })
 
 devtools(app, { serveStatic })
