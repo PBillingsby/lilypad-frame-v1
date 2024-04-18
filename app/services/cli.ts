@@ -12,29 +12,50 @@ export async function runCliCommand({ userInput }: CLIProps): Promise<string> {
     throw new Error('WEB3_PRIVATE_KEY not set');
   }
 
-  const child = spawn('lilypad', ['run', 'sdxl:v0.9-lilypad1', '-i', `PromptEnv=PROMPT=${userInput}`], {
-    env: {
-      ...process.env,
-      WEB3_PRIVATE_KEY: web3PrivateKey,
-      SERVICE_SOLVER: process.env.SERVICE_SOLVER
-    }
-  });
+  return new Promise((resolve, reject) => {
+    const command = 'lilypad';
+    const args = ['run', 'sdxl-pipeline:v0.9-base-lilypad3', '-i', `PROMPT="${userInput}"`];
+    const options = {
+      env: {
+        ...process.env,
+        WEB3_PRIVATE_KEY: web3PrivateKey
+      }
+    };
 
-  child.stdout.on('data', (data) => {
-    console.log(`stdout: ${data}`);
-  });
+    // Log the command and its arguments for debugging
+    console.log('Running command:', command, args.join(' '));
 
-  child.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-  });
+    // Spawn the process with the command, arguments, and options
+    const child = spawn(command, args, options);
 
-  child.on('close', (code) => {
-    if (code === 0) {
+    let accumulatedOutput = ''; // Accumulate output from stdout
+
+    child.stdout.on('data', (data) => {
+      console.log(data.toString())
+      accumulatedOutput += data.toString(); // Append data to the accumulated output
+    });
+
+    child.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`Command failed with code ${code}`);
+        reject(new Error(`Command failed with code ${code}`));
+        return;
+      }
+
       console.log('Command executed successfully.');
-    } else {
-      console.error(`Command failed with code ${code}`);
-    }
+      // Process accumulated output after the process closes
+      const lines = accumulatedOutput.trim().split('\n');
+      const pathLine = lines.find(line => line.includes('open '));
+      if (!pathLine) {
+        reject(new Error('No "open" command found in output.'));
+      } else {
+        const filePath = pathLine.replace('open ', '').trim() + '/outputs/output_00001_.png';
+        resolve(filePath);
+      }
+    });
   });
-
-  return "string";
 }
