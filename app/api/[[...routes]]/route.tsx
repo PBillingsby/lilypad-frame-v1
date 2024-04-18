@@ -1,12 +1,13 @@
 /** @jsxImportSource frog/jsx */
 
 import { runCliCommand } from '@/app/services/cli'
-import { saveImage } from '@/app/services/saveImage'
-import { Button, Frog, TextInput } from 'frog'
+import { Button, Frog, TextInput, FrameContext, FrameResponse, TypedResponse, Env } from 'frog'
 import { devtools } from 'frog/dev'
-// import { neynar } from 'frog/hubs'
 import { handle } from 'frog/next'
 import { serveStatic } from 'frog/serve-static'
+import path from 'path'
+import fs from 'fs/promises'
+import { BlankInput } from 'hono/types'
 
 const app = new Frog({
   assetsPath: '/',
@@ -16,34 +17,10 @@ const app = new Frog({
 })
 
 app.frame('/', async (c) => {
-  const { buttonValue, inputText, status } = c
+  const { status } = c
   return c.res({
     action: '/submit',
-    image: (
-      <div
-        style={{
-          alignItems: 'center',
-          background:
-            status === 'response'
-              ? 'linear-gradient(to right, #432889, #17101F)'
-              : 'black',
-          backgroundSize: '100% 100%',
-          display: 'flex',
-          flexDirection: 'column',
-          flexWrap: 'nowrap',
-          height: '100%',
-          justifyContent: 'center',
-          textAlign: 'center',
-          width: '100%',
-        }}
-      >
-        {status === 'response'
-          ? `Nice choice.${inputText?.toUpperCase()}`
-          :
-          <img src="/frame-placeholder.png" width="100%" height="100%" />
-        }
-      </div>
-    ),
+    image: '/frame-placeholder.png',
     intents: [
       <TextInput placeholder="Enter Prompt" />,
       <Button value="generate">Generate</Button>,
@@ -52,37 +29,44 @@ app.frame('/', async (c) => {
   })
 })
 
-app.frame('/submit', async (c) => {
-  const { inputText, url } = c
-
+// Assuming c.res() correctly handles Promise responses internally.
+app.frame('/submit', async (c: FrameContext<Env, "/submit", BlankInput>): Promise<Response | TypedResponse<FrameResponse>> => {
+  const { inputText, url } = c;
   try {
     const filePath = await runCliCommand({ userInput: inputText });
-    const urlPath = filePath.replace('/tmp/lilypad/data/downloaded-files', '');
-    console.log(filePath, urlPath)
-  } catch (error) {
-    console.log(error)
-    // c.res.status(500).send('Error processing command: ' + error.message);
+    const fileName = path.basename(filePath);
+    const destinationPath = path.join(process.cwd(), 'public', fileName);
+
+    // Wait for the copy operation to complete before responding
+    await fs.copyFile(filePath, destinationPath);
+    console.log(`Image successfully saved to ${destinationPath}`);
+
+    return c.res({
+      action: '/save',
+      image: fileName ? `/${fileName}` : 'frame-placeholder.png',
+      intents: [
+        <Button.Link href={`/${fileName}`}>View Image</Button.Link>,
+        <Button value='reset'>Reset</Button>,
+      ],
+    });
+
+  } catch (err) {
+    console.error('Failed to copy file:', err);
+
+    return c.res({
+      action: '/save',
+
+      image: (
+        <div style={{ color: 'white', display: 'flex', fontSize: 60 }}>
+          An error has occurred. Reset and try again!
+        </div>
+      ),
+      intents: [
+        <Button value='reset'>Reset</Button>,
+      ],
+    });
   }
-  // Replace img src with returned IPFS link
-  return c.res({
-    action: '/',
-    image: (
-      <div style={{ color: 'white', display: 'flex', fontSize: 60 }}>
-        <img src="https://ipfs.io/ipfs/QmQqzMTavQgT4f4T5v6PWBp7XNKtoPmC9jvn12WPT3gkSE" />
-      </div>
-    ),
-    intents: [
-      <Button value="save">Save</Button>,
-      <Button value="reset">Reset</Button>,
-    ],
-  })
-})
-
-app.frame('/save', (c: any) => {
-  console.log(c.url)
-
-  return c.url
-})
+});
 
 devtools(app, { serveStatic })
 
