@@ -1,30 +1,12 @@
 /** @jsxImportSource frog/jsx */
 import { saveImage } from '@/app/services/saveImage'
+import { stream } from '@/app/services/stream'
 import { Button, Frog, TextInput } from 'frog'
 import { devtools } from 'frog/dev'
 // import { neynar } from 'frog/hubs'
 import { handle } from 'frog/next'
 import { serveStatic } from 'frog/serve-static'
 import fetch from 'node-fetch';
-
-const fetchWithTimeout = async (url: string, options = {}, timeout = 5000) => {
-  const controller = new AbortController();
-  const { signal } = controller;
-  const fetchPromise = fetch(url, { ...options, signal });
-
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetchPromise;
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      throw new Error('Request timed out');
-    }
-    throw error;
-  }
-};
 
 const app = new Frog({
   assetsPath: '/',
@@ -72,22 +54,16 @@ app.frame('/submit', async (c) => {
   let loading = true;
   let generatedImageUrl;
   try {
-    const URL = "http://js-cli-wrapper.lilypad.tech"
-    const pk = process.env.PRIVATE_KEY
-    const module = "sdxl-pipeline:v0.9-base-lilypad3"
+    console.log("PRE FETCHING....");
 
-    const response = await fetchWithTimeout(URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ pk, module, inputText })
-    }, 10000).then((raw: any) => raw.json());
+    const response = await stream(inputText ?? "");
 
-    generatedImageUrl = response.url;
-    loading = false
+    console.log("POST FETCHING....", response);
+
+    // generatedImageUrl = response.url;
+    let loading = false;
   } catch (error) {
-    console.log(error)
+    console.log(error);
     // c.res.status(500).send('Error processing command: ' + error.message);
   }
   // Replace img src with returned IPFS link
